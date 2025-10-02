@@ -33,6 +33,12 @@
             loadingError: false
         };
 
+        // Make functions global so onclick handlers work
+        window.toggleLandmark = toggleLandmark;
+        window.handleLogin = handleLogin;
+        window.logout = logout;
+        window.switchView = switchView;
+
         async function loadDataFromSheet() {
             try {
                 const response = await fetch(SHEET_URL);
