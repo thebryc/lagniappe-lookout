@@ -13,7 +13,7 @@
     <script>
         const SHEET_ID = '1k1Pyl4j-oMn1SCwAvd2dPuqdN3Rx6yfkY4SgJqhg6cI';
         const SHEET_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv`;
-        const FORM_ID = '1FAIpQLSckNwguwLFnehRVHxW7';
+        const FORM_ID = '1FAIpQLScFmiAQlM7_WuQt7sLbb9D24wtRpziwJwiqtI-XRDOTZHBzUA';
         
         const LANDMARKS = [
             'Superdome', 'Streetcar', 'Beignet Shop', 'Blue Dog', 'Mural',
@@ -50,11 +50,14 @@
                     .filter(row => row.Name && row.Landmark);
                 
                 state.loadingError = false;
-                render();
+                
+                // Only re-render if logged in (don't interrupt login screen)
+                if (state.isLoggedIn) {
+                    render();
+                }
             } catch (error) {
                 console.error('Error loading data:', error);
                 state.loadingError = true;
-                render();
             }
         }
 
@@ -120,10 +123,14 @@
         function handleLogin() {
             const input = document.getElementById('nameInput');
             const name = input ? input.value.trim() : '';
+            console.log('Login attempted with name:', name);
             if (name) {
                 state.currentUser = name;
                 state.isLoggedIn = true;
+                console.log('Login successful, rendering main app');
                 render();
+            } else {
+                alert('Please enter your name!');
             }
         }
 
@@ -155,6 +162,38 @@
         function render() {
             const root = document.getElementById('root');
             root.innerHTML = state.isLoggedIn ? renderMainApp() : renderLoginScreen();
+            
+            // Attach event listeners after rendering
+            if (!state.isLoggedIn) {
+                const loginBtn = document.getElementById('loginBtn');
+                const nameInput = document.getElementById('nameInput');
+                
+                if (loginBtn) {
+                    loginBtn.addEventListener('click', handleLogin);
+                }
+                if (nameInput) {
+                    nameInput.addEventListener('keypress', function(e) {
+                        if (e.key === 'Enter') handleLogin();
+                    });
+                }
+            } else {
+                // Attach event listeners for main app
+                const checklistBtn = document.getElementById('checklistBtn');
+                const leaderboardBtn = document.getElementById('leaderboardBtn');
+                const logoutBtn = document.getElementById('logoutBtn');
+                
+                if (checklistBtn) checklistBtn.addEventListener('click', () => switchView('checklist'));
+                if (leaderboardBtn) leaderboardBtn.addEventListener('click', () => switchView('leaderboard'));
+                if (logoutBtn) logoutBtn.addEventListener('click', logout);
+                
+                // Attach landmark button listeners
+                const landmarkBtns = document.querySelectorAll('[data-landmark]');
+                landmarkBtns.forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        toggleLandmark(this.getAttribute('data-landmark'));
+                    });
+                });
+            }
         }
 
         function renderLoginScreen() {
@@ -175,11 +214,11 @@
                                     id="nameInput"
                                     class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none"
                                     placeholder="Your name..."
-                                    onkeypress="if(event.key==='Enter') window.handleLogin()"
                                 />
                             </div>
                             <button
-                                onclick="window.handleLogin()"
+                                id="loginBtn"
+                                type="button"
                                 class="w-full bg-gradient-to-r from-purple-600 via-green-600 to-yellow-500 text-white font-bold py-3 rounded-lg hover:shadow-xl transition-all"
                             >
                                 <div>Press here to</div>
@@ -220,7 +259,8 @@
 
                         <div class="flex gap-2 mb-4">
                             <button
-                                onclick="window.switchView('checklist')"
+                                id="checklistBtn"
+                                type="button"
                                 class="flex-1 py-3 rounded-xl font-bold transition-all ${
                                     state.view === 'checklist'
                                         ? 'bg-white text-purple-600 shadow-lg'
@@ -230,7 +270,8 @@
                                 My Checklist
                             </button>
                             <button
-                                onclick="window.switchView('leaderboard')"
+                                id="leaderboardBtn"
+                                type="button"
                                 class="flex-1 py-3 rounded-xl font-bold transition-all ${
                                     state.view === 'leaderboard'
                                         ? 'bg-white text-purple-600 shadow-lg'
@@ -246,7 +287,8 @@
                         </div>
 
                         <button
-                            onclick="window.logout()"
+                            id="logoutBtn"
+                            type="button"
                             class="w-full mt-4 bg-white/30 text-white py-3 rounded-xl font-medium hover:bg-white/40 transition-all"
                         >
                             Switch User
@@ -264,7 +306,8 @@
                         const checked = userLandmarks.has(landmark);
                         return `
                             <button
-                                onclick="window.toggleLandmark('${landmark}')"
+                                type="button"
+                                data-landmark="${landmark}"
                                 class="w-full flex items-center justify-between p-4 rounded-lg transition-all ${
                                     checked
                                         ? 'bg-green-50 border-2 border-green-500'
@@ -327,9 +370,13 @@
         // Auto-refresh every 5 seconds
         setInterval(loadDataFromSheet, 5000);
 
-        // Initial load
+        // Initial load - don't render yet, just load data
         loadDataFromSheet();
-        render();
+        
+        // Wait a moment before initial render to let data load
+        setTimeout(() => {
+            render();
+        }, 500);
     </script>
 </body>
 </html>
