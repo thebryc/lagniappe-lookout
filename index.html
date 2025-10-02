@@ -7,8 +7,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body>
-    <div id="root"></div>
+<body class="min-h-screen bg-gradient-to-br from-purple-700 via-green-600 to-yellow-500">
+    <div id="app"></div>
 
     <script>
         const SHEET_ID = '1k1Pyl4j-oMn1SCwAvd2dPuqdN3Rx6yfkY4SgJqhg6cI';
@@ -16,7 +16,7 @@
         const FORM_ID = '1FAIpQLScFmiAQlM7_WuQt7sLbb9D24wtRpziwJwiqtI-XRDOTZHBzUA';
         
         const LANDMARKS = [
-            'Superdome 🏟️', 'Streetcar 🚃', 'Beignet Shop ☕️', 'Blue Dog 🐕', 'Mural 🖼️',
+            'Superdome', 'Streetcar', 'Beignet Shop', 'Blue Dog', 'Mural',
             'Cajun Cuisine', 'Tulane University', 'Street Performer', 'Balcony',
             'Dillard University', 'Random Beads', 'Gumbo Restaurant', 'Jambalaya Restaurant',
             'Snowball Stand', 'Lawyer Billboard', 'Xavier University', 'Anything Saints',
@@ -25,43 +25,28 @@
             'Tour Bus', 'Students Touring'
         ];
 
-        let state = {
-            currentUser: '',
-            isLoggedIn: false,
-            allData: [],
-            view: 'checklist',
-            loadingError: false
-        };
+        let currentUser = '';
+        let isLoggedIn = false;
+        let allData = [];
+        let currentView = 'checklist';
 
-        async function loadDataFromSheet() {
+        async function loadData() {
             try {
                 const response = await fetch(SHEET_URL);
-                if (!response.ok) throw new Error('Failed to fetch');
-                
                 const csvText = await response.text();
                 const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
                 
-                state.allData = parsed.data
-                    .map(row => ({
-                        Name: row.Name || row.name,
-                        Landmark: row.Landmark || row.landmark,
-                        Timestamp: row.Timestamp || row.timestamp || new Date().toISOString()
-                    }))
-                    .filter(row => row.Name && row.Landmark);
+                allData = parsed.data.filter(row => row.Name && row.Landmark);
                 
-                state.loadingError = false;
-                
-                // Only re-render if logged in (don't interrupt login screen)
-                if (state.isLoggedIn) {
-                    render();
+                if (isLoggedIn) {
+                    updateDisplay();
                 }
             } catch (error) {
                 console.error('Error loading data:', error);
-                state.loadingError = true;
             }
         }
 
-        async function saveToSheet(name, landmark) {
+        async function saveData(name, landmark) {
             const formData = new FormData();
             formData.append('entry.411262238', name);
             formData.append('entry.34827782', landmark);
@@ -72,153 +57,49 @@
                     body: formData,
                     mode: 'no-cors'
                 });
-                setTimeout(loadDataFromSheet, 1500);
+                setTimeout(loadData, 1500);
             } catch (error) {
                 console.error('Error saving:', error);
             }
         }
 
         function getUserLandmarks(name) {
-            return new Set(
-                state.allData
-                    .filter(row => row.Name === name)
-                    .map(row => row.Landmark)
-            );
+            return new Set(allData.filter(row => row.Name === name).map(row => row.Landmark));
         }
 
         function getLeaderboard() {
             const userScores = {};
             
-            state.allData.forEach(row => {
+            allData.forEach(row => {
                 if (!userScores[row.Name]) {
-                    userScores[row.Name] = {
-                        landmarks: new Set(),
-                        timestamp: new Date(row.Timestamp).getTime()
-                    };
+                    userScores[row.Name] = { landmarks: new Set(), timestamp: new Date(row.Timestamp).getTime() };
                 }
                 userScores[row.Name].landmarks.add(row.Landmark);
             });
 
             return Object.keys(userScores)
-                .map(name => ({
-                    name,
-                    score: userScores[name].landmarks.size,
-                    timestamp: userScores[name].timestamp
-                }))
-                .sort((a, b) => {
-                    if (b.score !== a.score) return b.score - a.score;
-                    return a.timestamp - b.timestamp;
-                });
+                .map(name => ({ name, score: userScores[name].landmarks.size, timestamp: userScores[name].timestamp }))
+                .sort((a, b) => b.score !== a.score ? b.score - a.score : a.timestamp - b.timestamp);
         }
 
-        function toggleLandmark(landmark) {
-            const userLandmarks = getUserLandmarks(state.currentUser);
-            if (userLandmarks.has(landmark)) {
-                alert('You already checked this one! 🎭');
-            } else {
-                saveToSheet(state.currentUser, landmark);
-            }
-        }
-
-        function handleLogin() {
-            const input = document.getElementById('nameInput');
-            const name = input ? input.value.trim() : '';
-            console.log('Login attempted with name:', name);
-            if (name) {
-                state.currentUser = name;
-                state.isLoggedIn = true;
-                console.log('Login successful, rendering main app');
-                render();
-            } else {
-                alert('Please enter your name!');
-            }
-        }
-
-        function logout() {
-            state.isLoggedIn = false;
-            state.currentUser = '';
-            render();
-        }
-
-        function switchView(newView) {
-            state.view = newView;
-            render();
-        }
-
-        // Make functions globally accessible
-        window.toggleLandmark = function(landmark) {
-            toggleLandmark(landmark);
-        };
-        window.handleLogin = function() {
-            handleLogin();
-        };
-        window.logout = function() {
-            logout();
-        };
-        window.switchView = function(view) {
-            switchView(view);
-        };
-
-        function render() {
-            const root = document.getElementById('root');
-            root.innerHTML = state.isLoggedIn ? renderMainApp() : renderLoginScreen();
-            
-            // Attach event listeners after rendering
-            if (!state.isLoggedIn) {
-                const loginBtn = document.getElementById('loginBtn');
-                const nameInput = document.getElementById('nameInput');
-                
-                if (loginBtn) {
-                    loginBtn.addEventListener('click', handleLogin);
-                }
-                if (nameInput) {
-                    nameInput.addEventListener('keypress', function(e) {
-                        if (e.key === 'Enter') handleLogin();
-                    });
-                }
-            } else {
-                // Attach event listeners for main app
-                const checklistBtn = document.getElementById('checklistBtn');
-                const leaderboardBtn = document.getElementById('leaderboardBtn');
-                const logoutBtn = document.getElementById('logoutBtn');
-                
-                if (checklistBtn) checklistBtn.addEventListener('click', () => switchView('checklist'));
-                if (leaderboardBtn) leaderboardBtn.addEventListener('click', () => switchView('leaderboard'));
-                if (logoutBtn) logoutBtn.addEventListener('click', logout);
-                
-                // Attach landmark button listeners
-                const landmarkBtns = document.querySelectorAll('[data-landmark]');
-                landmarkBtns.forEach(btn => {
-                    btn.addEventListener('click', function() {
-                        toggleLandmark(this.getAttribute('data-landmark'));
-                    });
-                });
-            }
-        }
-
-        function renderLoginScreen() {
-            return `
-                <div class="min-h-screen bg-gradient-to-br from-purple-700 via-green-600 to-yellow-500 flex items-center justify-center p-4">
+        function showLogin() {
+            document.getElementById('app').innerHTML = `
+                <div class="flex items-center justify-center min-h-screen p-4">
                     <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full">
                         <div class="text-center mb-6">
-                            <div class="w-16 h-16 mx-auto mb-4 text-6xl">🏆</div>
+                            <div class="text-6xl mb-4">🏆</div>
                             <h1 class="text-3xl font-bold text-gray-800 mb-2">Lagniappe Lookout</h1>
                             <p class="text-gray-600">Find all 25 landmarks around New Orleans!</p>
                         </div>
-                        
                         <div class="space-y-4">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Enter Your Name</label>
-                                <input
-                                    type="text"
-                                    id="nameInput"
-                                    class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none"
-                                    placeholder="Your name..."
-                                />
-                            </div>
+                            <input
+                                type="text"
+                                id="nameInput"
+                                class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none"
+                                placeholder="Enter your name..."
+                            />
                             <button
-                                id="loginBtn"
-                                type="button"
+                                id="startBtn"
                                 class="w-full bg-gradient-to-r from-purple-600 via-green-600 to-yellow-500 text-white font-bold py-3 rounded-lg hover:shadow-xl transition-all"
                             >
                                 <div>Press here to</div>
@@ -228,23 +109,44 @@
                     </div>
                 </div>
             `;
+
+            document.getElementById('startBtn').onclick = function() {
+                const name = document.getElementById('nameInput').value.trim();
+                if (name) {
+                    currentUser = name;
+                    isLoggedIn = true;
+                    showMain();
+                } else {
+                    alert('Please enter your name!');
+                }
+            };
+
+            document.getElementById('nameInput').onkeypress = function(e) {
+                if (e.key === 'Enter') {
+                    document.getElementById('startBtn').click();
+                }
+            };
         }
 
-        function renderMainApp() {
+        function showMain() {
+            updateDisplay();
+        }
+
+        function updateDisplay() {
+            const userLandmarks = getUserLandmarks(currentUser);
             const leaderboard = getLeaderboard();
-            const userLandmarks = getUserLandmarks(state.currentUser);
             const myProgress = userLandmarks.size;
-            const myRank = leaderboard.findIndex(p => p.name === state.currentUser) + 1;
+            const myRank = leaderboard.findIndex(p => p.name === currentUser) + 1;
             const progressPercent = (myProgress / LANDMARKS.length) * 100;
             const rankDisplay = myRank === 1 ? '🥇' : myRank === 2 ? '🥈' : myRank === 3 ? '🥉' : myRank > 0 ? `#${myRank}` : '-';
 
-            return `
-                <div class="min-h-screen bg-gradient-to-br from-purple-700 via-green-600 to-yellow-500 p-4">
+            document.getElementById('app').innerHTML = `
+                <div class="p-4">
                     <div class="max-w-4xl mx-auto">
                         <div class="bg-white rounded-2xl shadow-xl p-6 mb-4">
                             <div class="flex justify-between items-center mb-4">
                                 <div>
-                                    <h1 class="text-2xl font-bold text-gray-800">Hey, ${state.currentUser}! 👋</h1>
+                                    <h1 class="text-2xl font-bold text-gray-800">Hey, ${currentUser}! 👋</h1>
                                     <p class="text-gray-600">${myProgress}/${LANDMARKS.length} landmarks found</p>
                                 </div>
                                 <div class="text-right">
@@ -258,125 +160,134 @@
                         </div>
 
                         <div class="flex gap-2 mb-4">
-                            <button
-                                id="checklistBtn"
-                                type="button"
-                                class="flex-1 py-3 rounded-xl font-bold transition-all ${
-                                    state.view === 'checklist'
-                                        ? 'bg-white text-purple-600 shadow-lg'
-                                        : 'bg-white/30 text-white'
-                                }"
-                            >
+                            <button id="checklistBtn" class="flex-1 py-3 rounded-xl font-bold transition-all ${currentView === 'checklist' ? 'bg-white text-purple-600 shadow-lg' : 'bg-white/30 text-white'}">
                                 My Checklist
                             </button>
-                            <button
-                                id="leaderboardBtn"
-                                type="button"
-                                class="flex-1 py-3 rounded-xl font-bold transition-all ${
-                                    state.view === 'leaderboard'
-                                        ? 'bg-white text-purple-600 shadow-lg'
-                                        : 'bg-white/30 text-white'
-                                }"
-                            >
+                            <button id="leaderboardBtn" class="flex-1 py-3 rounded-xl font-bold transition-all ${currentView === 'leaderboard' ? 'bg-white text-purple-600 shadow-lg' : 'bg-white/30 text-white'}">
                                 Leaderboard 🏆
                             </button>
                         </div>
 
-                        <div class="bg-white rounded-2xl shadow-xl p-6">
-                            ${state.view === 'checklist' ? renderChecklist(userLandmarks) : renderLeaderboard(leaderboard)}
+                        <div class="bg-white rounded-2xl shadow-xl p-6 mb-4">
+                            <div id="content"></div>
                         </div>
 
-                        <button
-                            id="logoutBtn"
-                            type="button"
-                            class="w-full mt-4 bg-white/30 text-white py-3 rounded-xl font-medium hover:bg-white/40 transition-all"
-                        >
+                        <button id="logoutBtn" class="w-full bg-white/30 text-white py-3 rounded-xl font-medium hover:bg-white/40 transition-all">
                             Switch User
                         </button>
                     </div>
                 </div>
             `;
+
+            document.getElementById('checklistBtn').onclick = function() {
+                currentView = 'checklist';
+                updateContent();
+            };
+
+            document.getElementById('leaderboardBtn').onclick = function() {
+                currentView = 'leaderboard';
+                updateContent();
+            };
+
+            document.getElementById('logoutBtn').onclick = function() {
+                isLoggedIn = false;
+                currentUser = '';
+                showLogin();
+            };
+
+            updateContent();
         }
 
-        function renderChecklist(userLandmarks) {
-            return `
-                <div class="space-y-2">
-                    <h2 class="text-xl font-bold text-gray-800 mb-4">Check off what you find!</h2>
-                    ${LANDMARKS.map(landmark => {
-                        const checked = userLandmarks.has(landmark);
-                        return `
-                            <button
-                                type="button"
-                                data-landmark="${landmark}"
-                                class="w-full flex items-center justify-between p-4 rounded-lg transition-all ${
-                                    checked
-                                        ? 'bg-green-50 border-2 border-green-500'
-                                        : 'bg-gray-50 border-2 border-gray-200 hover:border-purple-300'
-                                }"
-                            >
-                                <span class="font-medium ${checked ? 'text-green-700' : 'text-gray-700'}">${landmark}</span>
-                                <div class="w-6 h-6 rounded-full flex items-center justify-center ${
-                                    checked ? 'bg-green-500' : 'bg-gray-300'
-                                }">
-                                    ${checked ? '<span class="text-white text-sm">✓</span>' : ''}
-                                </div>
-                            </button>
-                        `;
-                    }).join('')}
-                </div>
-            `;
+        function updateContent() {
+            const content = document.getElementById('content');
+            if (currentView === 'checklist') {
+                showChecklist(content);
+            } else {
+                showLeaderboard(content);
+            }
         }
 
-        function renderLeaderboard(leaderboard) {
-            return `
-                <div class="space-y-3">
-                    <h2 class="text-xl font-bold text-gray-800 mb-4">Live Rankings 🔥</h2>
-                    ${leaderboard.length === 0 ? '<p class="text-center text-gray-500 py-8">No one has found anything yet!</p>' : ''}
-                    ${leaderboard.map((player, index) => {
-                        const isMe = player.name === state.currentUser;
-                        const rank = index + 1;
-                        const rankEmoji = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : rank;
-                        
-                        let bgColor = 'bg-gray-50 border-gray-200';
-                        if (isMe) {
-                            bgColor = 'bg-purple-50 border-purple-500';
-                        } else if (rank === 1) {
-                            bgColor = 'bg-yellow-50 border-yellow-400';
-                        } else if (rank === 2) {
-                            bgColor = 'bg-gray-50 border-gray-400';
-                        } else if (rank === 3) {
-                            bgColor = 'bg-orange-50 border-orange-400';
-                        }
-                        
-                        return `
-                            <div class="flex items-center justify-between p-4 rounded-lg transition-all border-2 ${bgColor}">
-                                <div class="flex items-center gap-4">
-                                    <div class="text-2xl font-bold w-8 text-center">${rankEmoji}</div>
-                                    <div>
-                                        <div class="font-bold ${isMe ? 'text-purple-700' : 'text-gray-800'}">
-                                            ${player.name} ${isMe ? '(You!)' : ''}
-                                        </div>
-                                        <div class="text-sm text-gray-600">${player.score}/${LANDMARKS.length} landmarks</div>
+        function showChecklist(container) {
+            const userLandmarks = getUserLandmarks(currentUser);
+            
+            let html = '<h2 class="text-xl font-bold text-gray-800 mb-4">Check off what you find!</h2><div class="space-y-2">';
+            
+            LANDMARKS.forEach(landmark => {
+                const checked = userLandmarks.has(landmark);
+                html += `
+                    <button class="landmark-btn w-full flex items-center justify-between p-4 rounded-lg transition-all ${checked ? 'bg-green-50 border-2 border-green-500' : 'bg-gray-50 border-2 border-gray-200 hover:border-purple-300'}" data-landmark="${landmark}">
+                        <span class="font-medium ${checked ? 'text-green-700' : 'text-gray-700'}">${landmark}</span>
+                        <div class="w-6 h-6 rounded-full flex items-center justify-center ${checked ? 'bg-green-500' : 'bg-gray-300'}">
+                            ${checked ? '<span class="text-white text-sm">✓</span>' : ''}
+                        </div>
+                    </button>
+                `;
+            });
+            
+            html += '</div>';
+            container.innerHTML = html;
+
+            document.querySelectorAll('.landmark-btn').forEach(btn => {
+                btn.onclick = function() {
+                    const landmark = this.getAttribute('data-landmark');
+                    const userLandmarks = getUserLandmarks(currentUser);
+                    if (userLandmarks.has(landmark)) {
+                        alert('You already checked this one! 🎭');
+                    } else {
+                        saveData(currentUser, landmark);
+                    }
+                };
+            });
+        }
+
+        function showLeaderboard(container) {
+            const leaderboard = getLeaderboard();
+            
+            let html = '<h2 class="text-xl font-bold text-gray-800 mb-4">Live Rankings 🔥</h2><div class="space-y-3">';
+            
+            if (leaderboard.length === 0) {
+                html += '<p class="text-center text-gray-500 py-8">No one has found anything yet!</p>';
+            } else {
+                leaderboard.forEach((player, index) => {
+                    const isMe = player.name === currentUser;
+                    const rank = index + 1;
+                    const rankEmoji = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : rank;
+                    
+                    let bgColor = 'bg-gray-50 border-gray-200';
+                    if (isMe) bgColor = 'bg-purple-50 border-purple-500';
+                    else if (rank === 1) bgColor = 'bg-yellow-50 border-yellow-400';
+                    else if (rank === 2) bgColor = 'bg-gray-50 border-gray-400';
+                    else if (rank === 3) bgColor = 'bg-orange-50 border-orange-400';
+                    
+                    html += `
+                        <div class="flex items-center justify-between p-4 rounded-lg border-2 ${bgColor}">
+                            <div class="flex items-center gap-4">
+                                <div class="text-2xl font-bold w-8 text-center">${rankEmoji}</div>
+                                <div>
+                                    <div class="font-bold ${isMe ? 'text-purple-700' : 'text-gray-800'}">
+                                        ${player.name} ${isMe ? '(You!)' : ''}
                                     </div>
+                                    <div class="text-sm text-gray-600">${player.score}/${LANDMARKS.length} landmarks</div>
                                 </div>
-                                <div class="text-2xl font-bold text-purple-600">${player.score}</div>
                             </div>
-                        `;
-                    }).join('')}
-                </div>
-            `;
+                            <div class="text-2xl font-bold text-purple-600">${player.score}</div>
+                        </div>
+                    `;
+                });
+            }
+            
+            html += '</div>';
+            container.innerHTML = html;
         }
 
-        // Auto-refresh every 5 seconds
-        setInterval(loadDataFromSheet, 5000);
+        // Auto-refresh every 5 seconds (only when logged in)
+        setInterval(() => {
+            if (isLoggedIn) loadData();
+        }, 5000);
 
-        // Initial load - don't render yet, just load data
-        loadDataFromSheet();
-        
-        // Wait a moment before initial render to let data load
-        setTimeout(() => {
-            render();
-        }, 500);
+        // Start
+        loadData();
+        showLogin();
     </script>
 </body>
 </html>
